@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>库存盘点</title>
+
+<!-- PWA 配置 -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1A1710">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="库存盘点">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=DM+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #F5F2EC;
+    --surface: #FDFAF5;
+    --card: #FFFFFF;
+    --ink: #1A1710;
+    --ink-2: #4A4640;
+    --ink-3: #8A8680;
+    --accent: #D4521A;
+    --accent-light: #F7E4DA;
+    --green: #2A7A4B;
+    --green-light: #D6EFE1;
+    --yellow: #C07A10;
+    --yellow-light: #FDF3DC;
+    --blue: #1A5CB8;
+    --blue-light: #DAE8FF;
+    --red: #C0392B;
+    --red-light: #FDECEA;
+    --border: #E0DDD6;
+    --border-strong: #C8C4BC;
+    --shadow: 0 2px 8px rgba(26,23,16,0.07);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    overscroll-behavior: none;
+  }
+
+  .header {
+    background: var(--ink); color: #fff;
+    padding: 20px 16px 14px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -.3px; }
+  .header-date { font-size: 12px; color: #A0A09A; font-family: 'DM Mono', monospace; }
+  .header-stats { display: flex; gap: 10px; }
+  .stat-pill {
+    background: rgba(255,255,255,0.1); border-radius: 20px;
+    padding: 4px 12px; font-size: 12px; color: #D0CEC8;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .stat-pill b { color: #fff; font-weight: 600; }
+
+  .tabs {
+    display: flex; background: var(--ink);
+    padding: 0 16px 12px; gap: 4px;
+  }
+  .tab-btn {
+    flex: 1; padding: 8px 4px; border: none; border-radius: var(--radius-sm);
+    font-family: 'Noto Sans SC', sans-serif; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all .2s;
+    background: rgba(255,255,255,0.08); color: #A0A09A;
+  }
+  .tab-btn.active { background: var(--accent); color: #fff; }
+
+  .page { display: none; padding: 16px; }
+  .page.active { display: block; }
+
+  .card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 16px; margin-bottom: 12px;
+    box-shadow: var(--shadow); border: 1px solid var(--border);
+  }
+  .card-title {
+    font-size: 13px; font-weight: 700; color: var(--ink-2);
+    text-transform: uppercase; letter-spacing: .5px;
+    margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+  }
+  .card-title .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .card-title .dot-blue { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
+
+  .upload-zone {
+    border: 2px dashed var(--border-strong); border-radius: var(--radius);
+    padding: 28px 16px; text-align: center; cursor: pointer;
+    transition: all .2s; background: var(--surface); position: relative;
+  }
+  .upload-zone.drag-over { border-color: var(--accent); background: var(--accent-light); }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload-icon { font-size: 34px; margin-bottom: 8px; }
+  .upload-zone p { font-size: 14px; color: var(--ink-2); font-weight: 500; }
+  .upload-zone small { font-size: 12px; color: var(--ink-3); margin-top: 4px; display: block; }
+
+  .upload-zone.blue-zone { border-color: #9ABCE0; background: #F0F6FF; }
+  .upload-zone.blue-zone.drag-over { border-color: var(--blue); background: var(--blue-light); }
+
+  .template-box {
+    background: var(--yellow-light); border: 1px solid #D4A020;
+    border-radius: var(--radius-sm); padding: 12px; margin-bottom: 12px;
+  }
+  .template-box p { font-size: 13px; color: #7A5A10; line-height: 1.6; }
+  .template-box.blue { background: var(--blue-light); border-color: #5A9ADE; }
+  .template-box.blue p { color: #1A3A70; }
+  .template-box code {
+    font-family: 'DM Mono', monospace; background: rgba(232,160,32,.2);
+    padding: 1px 5px; border-radius: 4px; font-size: 12px;
+  }
+  .template-box.blue code { background: rgba(26,92,184,.15); }
+
+  .stock-status-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; border-radius: var(--radius-sm);
+    background: var(--blue-light); border: 1px solid #9ABCE0;
+    margin-top: 10px; font-size: 13px; color: var(--blue);
+  }
+  .stock-status-bar b { font-weight: 700; }
+
+  .scrollable-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .product-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .product-table th {
+    background: var(--bg); padding: 8px 10px; text-align: left;
+    font-weight: 600; font-size: 12px; color: var(--ink-3);
+    border-bottom: 1px solid var(--border);
+  }
+  .product-table td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .product-table tr:last-child td { border-bottom: none; }
+  .category-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 20px;
+    font-size: 11px; font-weight: 500;
+    background: var(--accent-light); color: var(--accent);
+  }
+  .sys-qty-cell {
+    font-family: 'DM Mono', monospace; font-size: 13px;
+    font-weight: 600; color: var(--blue); text-align: right;
+  }
+  .sys-qty-cell.empty { color: var(--ink-3); font-weight: 400; font-size: 12px; }
+
+  .filter-bar {
+    background: var(--card); border-radius: var(--radius);
+    padding: 12px; margin-bottom: 12px;
+    box-shadow: var(--shadow); border: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .search-input, .select-input {
+    flex: 1; padding: 10px 12px; border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: 'Noto Sans SC', sans-serif; font-size: 14px;
+    background: var(--surface); color: var(--ink); outline: none;
+    transition: border-color .2s;
+  }
+  .search-input:focus, .select-input:focus { border-color: var(--accent); }
+
+  /* ── Diff Bar ── */
+  .diff-bar {
+    display: flex; align-items: stretch;
+    border-radius: var(--radius-sm); overflow: hidden;
+    border: 1px solid var(--border); margin-bottom: 10px;
+  }
+  .diff-cell {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 8px 4px; text-align: center;
+  }
+  .diff-cell + .diff-cell { border-left: 1px solid var(--border); }
+  .diff-cell .dc-label {
+    font-size: 10px; color: var(--ink-3); margin-bottom: 3px;
+    font-weight: 500; letter-spacing: .3px;
+  }
+  .diff-cell .dc-value {
+    font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 600; line-height: 1;
+  }
+  .diff-cell.dc-system { background: #F0F6FF; }
+  .diff-cell.dc-system .dc-value { color: var(--blue); }
+  .diff-cell.dc-counted { background: var(--surface); }
+  .diff-cell.dc-counted .dc-value { color: var(--ink); }
+  .diff-cell.dc-diff { }
+  .diff-cell.dc-diff.diff-ok     { background: var(--green-light); }
+  .diff-cell.dc-diff.diff-ok .dc-value     { color: var(--green); }
+  .diff-cell.dc-diff.diff-low    { background: var(--yellow-light); }
+  .diff-cell.dc-diff.diff-low .dc-value    { color: var(--yellow); }
+  .diff-cell.dc-diff.diff-high   { background: var(--blue-light); }
+  .diff-cell.dc-diff.diff-high .dc-value   { color: var(--blue); }
+  .diff-cell.dc-diff.diff-na     { background: var(--bg); }
+  .diff-cell.dc-diff.diff-na .dc-value     { color: var(--ink-3); }
+
+  /* ── Count Item ── */
+  .count-item {
+    background: var(--card); border-radius: var(--radius);
+    padding: 14px; margin-bottom: 10px;
+    box-shadow: var(--shadow); border: 1px solid var(--border);
+    border-left: 3px solid var(--border-strong);
+    transition: border-left-color .2s;
+  }
+  .count-item.has-batches { border-left-color: var(--green); }
+  .count-item.diff-low    { border-left-color: var(--yellow); }
+  .count-item.diff-high   { border-left-color: var(--blue); }
+  .count-item.diff-ok     { border-left-color: var(--green); }
+  .count-item-header {
+    display: flex; justify-content: space-between;
+    align-items: flex-start; margin-bottom: 10px;
+  }
+  .count-item-name { font-size: 15px; font-weight: 600; flex: 1; padding-right: 8px; line-height: 1.3; }
+  .batch-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    background: var(--green-light); color: var(--green); white-space: nowrap; flex-shrink: 0;
+  }
+
+  /* ── Batch Rows ── */
+  .batch-list { display: flex; flex-direction: column; gap: 0; margin-bottom: 10px;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+
+  .batch-row {
+    display: flex; align-items: center;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    animation: slideIn .15s ease;
+  }
+  .batch-row:last-child { border-bottom: none; }
+  @keyframes slideIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+
+  .batch-index {
+    width: 32px; flex-shrink: 0;
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    color: var(--ink-3); text-align: center; padding: 0 4px;
+    align-self: stretch; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); border-right: 1px solid var(--border);
+  }
+
+  .batch-no-input {
+    flex: 1; padding: 13px 12px; border: none; outline: none;
+    font-family: 'DM Mono', monospace; font-size: 14px;
+    background: transparent; color: var(--ink);
+    border-right: 1px solid var(--border);
+    min-width: 0;
+  }
+  .batch-no-input::placeholder { color: var(--ink-3); font-size: 13px; }
+  .batch-no-input:focus { background: #FFFDF9; }
+
+  .batch-qty-input {
+    width: 80px; flex-shrink: 0;
+    padding: 13px 10px; border: none; outline: none;
+    font-family: 'DM Mono', monospace; font-size: 16px; font-weight: 600;
+    text-align: center; background: transparent; color: var(--ink);
+    border-right: 1px solid var(--border);
+  }
+  .batch-qty-input::placeholder { color: var(--ink-3); font-size: 13px; font-weight: 400; }
+  .batch-qty-input:focus { background: #FFFDF9; }
+  .batch-qty-input::-webkit-inner-spin-button,
+  .batch-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+  .del-batch-btn {
+    width: 40px; flex-shrink: 0; align-self: stretch;
+    border: none; background: transparent; cursor: pointer;
+    color: var(--ink-3); font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+  }
+  .del-batch-btn:active { background: #FFE5E5; color: #C0392B; }
+
+  .batch-list-header {
+    display: flex; align-items: center;
+    background: var(--bg); border: 1.5px solid var(--border);
+    border-bottom: none; border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    padding: 0;
+  }
+  .batch-list-header span {
+    font-size: 11px; font-weight: 700; color: var(--ink-3);
+    letter-spacing: .5px; padding: 7px 0;
+  }
+  .bh-idx  { width: 32px; text-align: center; border-right: 1px solid var(--border); }
+  .bh-no   { flex: 1; padding-left: 12px; border-right: 1px solid var(--border); }
+  .bh-qty  { width: 80px; text-align: center; border-right: 1px solid var(--border); }
+  .bh-del  { width: 40px; }
+
+  .add-batch-btn {
+    width: 100%; padding: 12px;
+    border: 1.5px dashed var(--border-strong); border-radius: var(--radius-sm);
+    background: transparent; cursor: pointer;
+    font-family: 'Noto Sans SC', sans-serif; font-size: 14px;
+    color: var(--ink-3); font-weight: 500;
+    transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 5px;
+  }
+  .add-batch-btn:active { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+  .progress-wrap { margin-bottom: 14px; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-3); margin-bottom: 5px; }
+  .progress-bar { height: 6px; background: var(--border); border-radius: 10px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--green); border-radius: 10px; transition: width .4s; }
+
+  .results-summary {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;
+  }
+  .summary-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 14px; text-align: center;
+    box-shadow: var(--shadow); border: 1px solid var(--border);
+  }
+  .summary-card .num {
+    font-family: 'DM Mono', monospace; font-size: 26px;
+    font-weight: 500; color: var(--ink); line-height: 1;
+  }
+  .summary-card .lbl { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+  .summary-card.accent .num { color: var(--accent); }
+  .summary-card.green .num { color: var(--green); }
+  .summary-card.blue .num { color: var(--blue); }
+  .summary-card.yellow .num { color: var(--yellow); }
+
+  .result-filter-row { display: flex; gap: 6px; margin-bottom: 10px; overflow-x: auto; }
+  .result-filter-btn {
+    padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border);
+    background: var(--surface); font-size: 12px; font-weight: 500;
+    cursor: pointer; color: var(--ink-2); transition: all .15s; white-space: nowrap; flex-shrink: 0;
+  }
+  .result-filter-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  .result-product {
+    background: var(--card); border-radius: var(--radius);
+    border: 1px solid var(--border); margin-bottom: 10px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .result-product-header {
+    padding: 12px 14px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .result-product-name { font-size: 14px; font-weight: 600; }
+  .result-product-cat { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+  .result-product-total {
+    font-family: 'DM Mono', monospace; font-size: 20px; font-weight: 500;
+    color: var(--green); min-width: 44px; text-align: right; flex-shrink: 0;
+  }
+  .result-product-total.empty { color: var(--ink-3); font-size: 16px; }
+
+  /* diff chip in result */
+  .diff-chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 3px 9px; border-radius: 20px; font-size: 12px;
+    font-family: 'DM Mono', monospace; font-weight: 600;
+    flex-shrink: 0;
+  }
+  .diff-chip.ok   { background: var(--green-light); color: var(--green); }
+  .diff-chip.low  { background: var(--yellow-light); color: var(--yellow); }
+  .diff-chip.high { background: var(--blue-light); color: var(--blue); }
+
+  /* system qty row in result table */
+  .result-sys-row td { background: #F0F6FF; color: var(--blue); font-size: 12px; font-weight: 600; }
+  .result-diff-row td { font-size: 12px; font-weight: 700; }
+  .result-diff-row.ok td   { background: var(--green-light); color: var(--green); }
+  .result-diff-row.low td  { background: var(--yellow-light); color: var(--yellow); }
+  .result-diff-row.high td { background: var(--blue-light); color: var(--blue); }
+
+  .result-batch-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .result-batch-table th {
+    background: var(--bg); padding: 7px 14px; text-align: left;
+    font-weight: 600; font-size: 11px; color: var(--ink-3);
+    border-bottom: 1px solid var(--border);
+  }
+  .result-batch-table td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .result-batch-table tr:last-child td { border-bottom: none; }
+  .result-batch-table td.qty { text-align: right; font-family: 'DM Mono', monospace; font-weight: 500; }
+
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    width: 100%; padding: 14px; border: none; border-radius: var(--radius);
+    font-family: 'Noto Sans SC', sans-serif; font-size: 15px;
+    font-weight: 600; cursor: pointer; transition: all .15s; letter-spacing: .3px;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:active { background: #B8401A; transform: scale(.99); }
+  .btn-secondary { background: var(--card); color: var(--ink); border: 1.5px solid var(--border-strong); }
+  .btn-secondary:active { background: var(--bg); }
+  .btn-green { background: var(--green); color: #fff; }
+  .btn-green:active { background: #1F6038; }
+  .btn + .btn { margin-top: 8px; }
+
+  .float-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--card); border-top: 1px solid var(--border);
+    padding: 10px 16px 24px;
+    display: none; gap: 8px; align-items: center; z-index: 50;
+    box-shadow: 0 -4px 16px rgba(26,23,16,0.08);
+  }
+  .float-bar.visible { display: flex; }
+  #page-count.active { padding-bottom: 90px; }
+
+  .empty { text-align: center; padding: 48px 24px; color: var(--ink-3); }
+  .empty .emoji { font-size: 40px; margin-bottom: 12px; }
+  .empty p { font-size: 14px; line-height: 1.6; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--ink); color: #fff;
+    padding: 10px 20px; border-radius: 30px;
+    font-size: 13px; font-weight: 500; z-index: 999;
+    transition: transform .3s cubic-bezier(.34,1.56,.64,1); white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  .cat-section-label {
+    font-size: 11px; font-weight: 700; color: var(--ink-3);
+    letter-spacing: .8px; padding: 12px 4px 4px; text-transform: uppercase;
+  }
+
+  .section-divider {
+    height: 1px; background: var(--border); margin: 4px 0 14px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <h1>📦 库存盘点</h1>
+    <span class="header-date" id="header-date"></span>
+  </div>
+  <div class="header-stats">
+    <div class="stat-pill">品项 <b id="stat-total">0</b></div>
+    <div class="stat-pill">已盘 <b id="stat-counted">0</b></div>
+    <div class="stat-pill">批次 <b id="stat-batches">0</b></div>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('import')">📋 商品管理</button>
+  <button class="tab-btn" onclick="switchTab('count')">🔢 盘点录入</button>
+  <button class="tab-btn" onclick="switchTab('result')">📊 盘点结果</button>
+</div>
+
+<!-- ═══ IMPORT ═══ -->
+<div class="page active" id="page-import">
+
+  <!-- Unified upload -->
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>上传商品库存</div>
+    <div class="template-box">
+      <p>📌 表格必填列：<code>品类</code>、<code>产品名称</code>；可选列：<code>产品代码</code>、<code>产品规格</code>、<code>库存数量</code><br>
+      <code>产品规格</code> 为每件产品的瓶数，用于计算盘点差异率；若含 <code>库存数量</code> 列，将同步导入系统库存用于差异核对（支持 .xlsx / .xls / .csv）</p>
+    </div>
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="file-input" accept=".xlsx,.xls,.csv">
+      <div class="upload-icon">📂</div>
+      <p>点击选择商品文件</p>
+      <small>.xlsx / .xls / .csv 均可</small>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn btn-secondary" style="flex:1" onclick="downloadTemplate()">⬇ 下载模板</button>
+      <button class="btn btn-secondary" style="flex:1;color:var(--accent)" onclick="clearSystemStock()" id="clear-stock-btn">🗑 清除库存</button>
+    </div>
+    <div id="stock-import-status" style="display:none"></div>
+  </div>
+
+  <!-- Product preview -->
+  <div class="card" id="product-preview-card" style="display:none">
+    <div class="card-title"><span class="dot"></span>已导入商品
+      <span id="import-count" style="font-weight:400;color:var(--ink-3);font-size:12px"></span>
+    </div>
+    <div class="scrollable-table">
+      <table class="product-table">
+        <thead><tr><th>#</th><th>品类</th><th>产品代码</th><th>产品名称</th><th>规格(瓶/件)</th><th>系统库存</th><th></th></tr></thead>
+        <tbody id="product-tbody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn btn-primary" onclick="switchTab('count')">开始盘点 →</button>
+    </div>
+  </div>
+
+  <!-- Manual add -->
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>手动添加商品</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input class="search-input" id="manual-cat" placeholder="品类" style="flex:.8">
+      <input class="search-input" id="manual-code" placeholder="产品代码" style="flex:.8">
+      <input class="search-input" id="manual-name" placeholder="产品名称" style="flex:1.5">
+      <input class="search-input" id="manual-spec" placeholder="规格(瓶/件)" type="number" min="1" style="flex:.7">
+    </div>
+    <button class="btn btn-secondary" onclick="addManual()">＋ 添加</button>
+  </div>
+</div>
+
+<!-- ═══ COUNT ═══ -->
+<div class="page" id="page-count">
+  <div class="filter-bar">
+    <select class="select-input" id="filter-cat" onchange="renderCountList()">
+      <option value="">全部品类</option>
+    </select>
+    <input class="search-input" id="filter-name" placeholder="🔍 搜索产品名称…" oninput="renderCountList()">
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-label">
+      <span>盘点进度</span>
+      <span id="progress-text">0 / 0</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+  </div>
+
+  <div id="count-list"></div>
+
+  <div class="float-bar" id="float-bar">
+    <button class="btn btn-secondary" style="flex:1" onclick="clearFilter()">清除筛选</button>
+    <button class="btn btn-green" style="flex:1" onclick="switchTab('result')">查看结果 →</button>
+  </div>
+</div>
+
+<!-- ═══ RESULT ═══ -->
+<div class="page" id="page-result">
+  <div class="results-summary">
+    <div class="summary-card green">
+      <div class="num" id="res-counted">0</div>
+      <div class="lbl">已盘品项</div>
+    </div>
+    <div class="summary-card blue">
+      <div class="num" id="res-batches">0</div>
+      <div class="lbl">总批次数</div>
+    </div>
+    <div class="summary-card">
+      <div class="num" id="res-total-qty">0</div>
+      <div class="lbl">总盘点数量</div>
+    </div>
+    <div class="summary-card accent">
+      <div class="num" id="res-uncounted">0</div>
+      <div class="lbl">未盘品项</div>
+    </div>
+  </div>
+
+  <!-- Diff summary (shown only if systemStock loaded) -->
+  <div id="diff-summary-wrap" style="display:none">
+    <!-- Discrepancy Rate Banner -->
+    <div id="diff-rate-banner" style="display:none;margin-bottom:10px">
+      <div style="background:var(--ink);border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div>
+          <div style="font-size:11px;color:#A0A09A;font-weight:600;letter-spacing:.5px;margin-bottom:4px">总体盘点差异率</div>
+          <div style="font-size:11px;color:#7A7870;margin-top:4px">（盘盈瓶数 + 盘亏瓶数）÷ 总瓶数</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'DM Mono',monospace;font-size:32px;font-weight:700;color:#fff;line-height:1" id="diff-rate-pct">—</div>
+          <div style="font-size:11px;color:#A0A09A;margin-top:3px" id="diff-rate-detail"></div>
+        </div>
+      </div>
+    </div>
+    <div class="results-summary" style="margin-bottom:6px">
+      <div class="summary-card green">
+        <div class="num" id="res-diff-ok">0</div>
+        <div class="lbl">✅ 数量吻合</div>
+      </div>
+      <div class="summary-card yellow">
+        <div class="num" id="res-diff-low">0</div>
+        <div class="lbl">⬇ 盘点偏少</div>
+      </div>
+      <div class="summary-card blue">
+        <div class="num" id="res-diff-high">0</div>
+        <div class="lbl">⬆ 盘点偏多</div>
+      </div>
+      <div class="summary-card accent">
+        <div class="num" id="res-diff-na">0</div>
+        <div class="lbl">— 无系统库存</div>
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div class="result-filter-row" id="diff-filter-row">
+        <button class="result-filter-btn active" onclick="setDiffFilter('all',this)">全部</button>
+        <button class="result-filter-btn" onclick="setDiffFilter('ok',this)">✅ 吻合</button>
+        <button class="result-filter-btn" onclick="setDiffFilter('low',this)">⬇ 偏少</button>
+        <button class="result-filter-btn" onclick="setDiffFilter('high',this)">⬆ 偏多</button>
+        <button class="result-filter-btn" onclick="setDiffFilter('na',this)">— 无对比</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="result-list"></div>
+
+  <div style="padding-bottom:16px">
+    <button class="btn btn-green" onclick="exportExcel()">📥 导出 Excel</button>
+    <button class="btn btn-secondary" onclick="exportCSV()">📄 导出 CSV</button>
+    <button class="btn btn-secondary" onclick="resetCounts()" style="margin-top:8px;color:var(--accent)">🗑 清空本次盘点数据</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let products = [];
+let batches  = {};   // { pid: [{id, batchNo, qty}] }
+let systemStock = {}; // { pid: qty }  — existing stock before count
+let resultFilter = 'all';
+let diffFilter   = 'all';
+
+// init date
+const _n = new Date();
+document.getElementById('header-date').textContent =
+  `${_n.getFullYear()}-${String(_n.getMonth()+1).padStart(2,'0')}-${String(_n.getDate()).padStart(2,'0')}`;
+
+// load storage
+try { const s = localStorage.getItem('inv2_products');    if(s) products     = JSON.parse(s); } catch(e){}
+try { const s = localStorage.getItem('inv2_batches');     if(s) batches      = JSON.parse(s); } catch(e){}
+try { const s = localStorage.getItem('inv2_systemstock'); if(s) systemStock  = JSON.parse(s); } catch(e){}
+
+renderAll();
+updateStockStatusBar();
+
+// ── Tabs ──
+function switchTab(tab) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + tab).classList.add('active');
+  document.querySelectorAll('.tab-btn')[['import','count','result'].indexOf(tab)].classList.add('active');
+  document.getElementById('float-bar').classList.toggle('visible', tab === 'count');
+  if (tab === 'count')  renderCountList();
+  if (tab === 'result') renderResultList();
+  updateStats();
+}
+
+// ── Upload (products) ──
+const fileInput  = document.getElementById('file-input');
+const uploadZone = document.getElementById('upload-zone');
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop',      e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb   = XLSX.read(e.target.result, {type:'binary'});
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
+      if (!data.length) { showToast('表格为空'); return; }
+      const keys    = Object.keys(data[0]);
+      const catKey  = keys.find(k => k.includes('品类') || k.toLowerCase().includes('category'));
+      const nameKey = keys.find(k => k.includes('产品名称')||k.includes('名称')||k.includes('商品')||k.toLowerCase().includes('name')||k.toLowerCase().includes('product'));
+      const codeKey = keys.find(k => k.includes('产品代码')||k.includes('编码')||k.includes('代码')||k.toLowerCase().includes('code')||k.toLowerCase().includes('sku'));
+      const qtyKey  = keys.find(k => k.includes('库存数量')||k.includes('库存')||k.includes('数量')||k.toLowerCase().includes('qty')||k.toLowerCase().includes('stock')||k.toLowerCase().includes('quantity'));
+      const specKey = keys.find(k => k.includes('产品规格')||k.includes('规格')||k.toLowerCase().includes('spec')||k.toLowerCase().includes('bottles'));
+      if (!catKey||!nameKey) { showToast('未找到"品类"或"产品名称"列'); return; }
+      const validRows = data.filter(r=>r[nameKey]);
+      const newP = validRows.map((r,i)=>({
+        id: 'p_'+Date.now()+'_'+i,
+        category: String(r[catKey]||'未分类').trim(),
+        code: codeKey ? String(r[codeKey]||'').trim() : '',
+        name: String(r[nameKey]).trim(),
+        spec: specKey ? (parseInt(r[specKey])||1) : 1
+      }));
+      if (!newP.length) { showToast('没有有效数据行'); return; }
+      products = newP;
+
+      // If 库存数量 column exists, import system stock at the same time
+      let stockMatched = 0;
+      if (qtyKey) {
+        const newStock = {};
+        newP.forEach((p, i) => {
+          const qty = parseInt(validRows[i][qtyKey]);
+          if (!isNaN(qty) && qty >= 0) { newStock[p.id] = qty; stockMatched++; }
+        });
+        systemStock = newStock;
+        saveSystemStock();
+      }
+
+      saveProducts(); renderAll(); updateStockStatusBar();
+      const stockMsg = stockMatched ? `，含库存数量 ${stockMatched} 项` : '';
+      showToast(`✅ 成功导入 ${newP.length} 个品项${stockMsg}`);
+    } catch(err) { showToast('解析失败：'+err.message); }
+  };
+  reader.readAsBinaryString(file);
+}
+
+
+
+
+function clearSystemStock() {
+  if (!Object.keys(systemStock).length) { showToast('尚未导入库存数据'); return; }
+  if (!confirm('确认清除已导入的现有库存数量？')) return;
+  systemStock = {};
+  saveSystemStock();
+  renderAll();
+  updateStockStatusBar();
+  showToast('已清除现有库存数据');
+}
+
+function updateStockStatusBar() {
+  const bar    = document.getElementById('stock-import-status');
+  const count  = Object.keys(systemStock).length;
+  const total  = products.length;
+  if (count > 0) {
+    bar.style.display = 'block';
+    bar.innerHTML = `
+      <div class="stock-status-bar">
+        <span>✅</span>
+        <span>已导入现有库存：<b>${count}</b> 个品项匹配（共 ${total} 个）</span>
+      </div>`;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function addManual() {
+  const cat  = document.getElementById('manual-cat').value.trim()  || '未分类';
+  const code = document.getElementById('manual-code').value.trim();
+  const name = document.getElementById('manual-name').value.trim();
+  const spec = parseInt(document.getElementById('manual-spec').value) || 1;
+  if (!name) { showToast('请输入产品名称'); return; }
+  products.push({id:'p_'+Date.now(), category:cat, code, name, spec});
+  document.getElementById('manual-code').value = '';
+  document.getElementById('manual-name').value = '';
+  document.getElementById('manual-spec').value = '';
+  saveProducts(); renderAll();
+  showToast('已添加：'+name);
+}
+
+function deleteProduct(id) {
+  products = products.filter(p=>p.id!==id);
+  delete batches[id];
+  delete systemStock[id];
+  saveProducts(); saveBatches(); saveSystemStock(); renderAll();
+}
+
+// ── Import preview ──
+function renderProductTable() {
+  const card = document.getElementById('product-preview-card');
+  if (!products.length) { card.style.display='none'; return; }
+  card.style.display='block';
+  document.getElementById('import-count').textContent = `${products.length} 个品项`;
+  document.getElementById('product-tbody').innerHTML = products.map((p,i)=>{
+    const sysQ = systemStock[p.id];
+    const hasStock = sysQ !== undefined;
+    const spec = p.spec || 1;
+    return `
+    <tr>
+      <td style="color:var(--ink-3);font-size:12px;font-family:'DM Mono',monospace">${i+1}</td>
+      <td><span class="category-badge">${esc(p.category)}</span></td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;color:var(--ink-2)">${esc(p.code||'')}</td>
+      <td style="font-weight:500">${esc(p.name)}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;text-align:center;color:var(--blue);font-weight:600">${spec > 1 ? spec+'瓶' : '<span style="color:var(--ink-3);font-weight:400">—</span>'}</td>
+      <td class="sys-qty-cell ${hasStock?'':'empty'}">${hasStock ? sysQ : '—'}</td>
+      <td><button onclick="deleteProduct('${p.id}')" style="border:none;background:none;color:var(--ink-3);cursor:pointer;font-size:18px;padding:2px 6px">×</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Count List ──
+function renderCountList() {
+  const catF  = document.getElementById('filter-cat').value;
+  const nameF = document.getElementById('filter-name').value.trim().toLowerCase();
+  const filtered = products.filter(p =>
+    (!catF  || p.category===catF) &&
+    (!nameF || p.name.toLowerCase().includes(nameF))
+  );
+  const container = document.getElementById('count-list');
+  if (!products.length) {
+    container.innerHTML = `<div class="empty"><div class="emoji">📋</div><p>还没有商品<br>请先在"商品管理"中导入或添加</p></div>`;
+    return;
+  }
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty"><div class="emoji">🔍</div><p>没有匹配的商品</p></div>`;
+    return;
+  }
+  const groups = {};
+  filtered.forEach(p => { (groups[p.category]=groups[p.category]||[]).push(p); });
+
+  container.innerHTML = Object.keys(groups).sort().map(cat => `
+    <div class="cat-section-label">${esc(cat)}</div>
+    ${groups[cat].map(p => buildCountItem(p)).join('')}
+  `).join('');
+
+  updateProgress();
+}
+
+function buildCountItem(p) {
+  const pb = batches[p.id] || [];
+  const totalQty = pb.reduce((s,b)=>s+(parseInt(b.qty)||0),0);
+  const hasBatches = pb.some(b => b.batchNo || (b.qty!==''&&b.qty!==undefined));
+  const batchRows = pb.map((b,i) => buildBatchRow(p.id, b, i+1)).join('');
+  const header = pb.length ? `
+    <div class="batch-list-header">
+      <span class="bh-idx">#</span>
+      <span class="bh-no">批次号</span>
+      <span class="bh-qty">数量</span>
+      <span class="bh-del"></span>
+    </div>` : '';
+
+  // Build diff bar
+  const hasSystemStock = Object.keys(systemStock).length > 0;
+  let diffBarHtml = '';
+  let diffClass = '';
+  if (hasSystemStock) {
+    const sysQ = systemStock[p.id];
+    const hasSys = sysQ !== undefined;
+    const diff   = hasSys ? (totalQty - sysQ) : null;
+    let diffLabel = '—', diffCls = 'diff-na', diffSign = '';
+    if (hasSys) {
+      if (diff === 0)      { diffLabel = '0'; diffCls = 'diff-ok'; diffSign = ''; }
+      else if (diff < 0)   { diffLabel = String(diff); diffCls = 'diff-low'; diffSign = ''; }
+      else                  { diffLabel = '+'+diff; diffCls = 'diff-high'; diffSign = ''; }
+    }
+    if (hasBatches && diff !== null) diffClass = diffCls;
+    diffBarHtml = `
+      <div class="diff-bar" id="diffbar-${p.id}">
+        <div class="diff-cell dc-system">
+          <span class="dc-label">系统库存</span>
+          <span class="dc-value">${hasSys ? sysQ : '—'}</span>
+        </div>
+        <div class="diff-cell dc-counted">
+          <span class="dc-label">已盘数量</span>
+          <span class="dc-value" id="dbc-${p.id}">${totalQty}</span>
+        </div>
+        <div class="diff-cell dc-diff ${diffCls}" id="dbdiff-${p.id}">
+          <span class="dc-label">差　　异</span>
+          <span class="dc-value">${diffLabel}</span>
+        </div>
+      </div>`;
+  }
+
+  return `
+  <div class="count-item ${hasBatches?'has-batches':''} ${diffClass}" id="item-${p.id}">
+    <div class="count-item-header">
+      <div style="flex:1;padding-right:8px">
+        <div class="count-item-name">${esc(p.name)}</div>
+        <div style="display:flex;gap:8px;margin-top:2px;align-items:center">
+          ${p.code ? `<span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-3)">${esc(p.code)}</span>` : ''}
+          ${(p.spec && p.spec > 1) ? `<span style="font-size:11px;color:var(--blue);background:var(--blue-light);border-radius:10px;padding:1px 7px;font-weight:600">${p.spec}瓶/件</span>` : ''}
+        </div>
+      </div>
+      ${hasBatches?`<span class="batch-badge">✓ ${pb.length}批 · ${totalQty}</span>`:''}
+    </div>
+    ${diffBarHtml}
+    ${header}<div class="batch-list" id="blist-${p.id}">${batchRows}</div>
+    <button class="add-batch-btn" onclick="addBatch('${p.id}')">＋ 添加批次</button>
+  </div>`;
+}
+
+function buildBatchRow(pid, b, idx) {
+  const i = idx || 1;
+  return `
+  <div class="batch-row" id="brow-${b.id}">
+    <span class="batch-index">${i}</span>
+    <input class="batch-no-input" type="text" placeholder="批次号…"
+      value="${esc(b.batchNo||'')}"
+      oninput="updateBatch('${pid}','${b.id}','batchNo',this.value)">
+    <input class="batch-qty-input" type="number" min="0" id="bqty-${b.id}"
+      value="${b.qty!==undefined&&b.qty!==''?b.qty:''}"
+      placeholder="数量"
+      oninput="updateBatch('${pid}','${b.id}','qty',this.value)">
+    <button class="del-batch-btn" onclick="deleteBatch('${pid}','${b.id}')">×</button>
+  </div>`;
+}
+
+// ── Batch ops ──
+function addBatch(pid) {
+  if (!batches[pid]) batches[pid] = [];
+  const nb = { id:'b_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), batchNo:'', qty:'' };
+  batches[pid].push(nb);
+  saveBatches();
+
+  const list = document.getElementById('blist-'+pid);
+  const item = document.getElementById('item-'+pid);
+  if (list) {
+    if (batches[pid].length === 1 && item) {
+      const existingHeader = item.querySelector('.batch-list-header');
+      if (!existingHeader) {
+        const hdr = document.createElement('div');
+        hdr.className = 'batch-list-header';
+        hdr.innerHTML = `<span class="bh-idx">#</span><span class="bh-no">批次号</span><span class="bh-qty">数量</span><span class="bh-del"></span>`;
+        list.parentNode.insertBefore(hdr, list);
+      }
+    }
+    const idx = batches[pid].length;
+    list.insertAdjacentHTML('beforeend', buildBatchRow(pid, nb, idx));
+    const inp = list.lastElementChild && list.lastElementChild.querySelector('.batch-no-input');
+    if (inp) inp.focus();
+  }
+  refreshItemHeader(pid);
+  updateProgress(); updateStats();
+}
+
+function deleteBatch(pid, bid) {
+  if (!batches[pid]) return;
+  batches[pid] = batches[pid].filter(b=>b.id!==bid);
+  if (!batches[pid].length) delete batches[pid];
+  saveBatches();
+  const row = document.getElementById('brow-'+bid);
+  if (row) row.remove();
+  const item = document.getElementById('item-'+pid);
+  if (item && !(batches[pid]||[]).length) {
+    const hdr = item.querySelector('.batch-list-header');
+    if (hdr) hdr.remove();
+  }
+  const list = document.getElementById('blist-'+pid);
+  if (list) {
+    list.querySelectorAll('.batch-index').forEach((el, i) => { el.textContent = i+1; });
+  }
+  refreshItemHeader(pid);
+  updateProgress(); updateStats();
+}
+
+function updateBatch(pid, bid, field, value) {
+  if (!batches[pid]) return;
+  const b = batches[pid].find(x=>x.id===bid);
+  if (!b) return;
+  if (field==='qty') b.qty = value===''?'':Math.max(0,parseInt(value)||0);
+  else b[field] = value;
+  saveBatches();
+  refreshItemHeader(pid);
+  updateProgress(); updateStats();
+}
+
+function adjustBatchQty(pid, bid, delta) {
+  const input = document.getElementById('bqty-'+bid);
+  const newVal = Math.max(0, (parseInt(input.value)||0) + delta);
+  input.value = newVal;
+  updateBatch(pid, bid, 'qty', String(newVal));
+}
+
+function refreshItemHeader(pid) {
+  const pb = batches[pid] || [];
+  const totalQty   = pb.reduce((s,b)=>s+(parseInt(b.qty)||0),0);
+  const hasBatches = pb.some(b=>b.batchNo||(b.qty!==''&&b.qty!==undefined));
+  const item = document.getElementById('item-'+pid);
+  if (!item) return;
+  item.classList.toggle('has-batches', hasBatches);
+
+  // update batch badge
+  const header = item.querySelector('.count-item-header');
+  let badge = header.querySelector('.batch-badge');
+  if (hasBatches) {
+    if (!badge) { badge=document.createElement('span'); badge.className='batch-badge'; header.appendChild(badge); }
+    badge.textContent = `✓ ${pb.length}批 · ${totalQty}`;
+  } else if (badge) badge.remove();
+
+  // update diff bar live
+  const diffBar = document.getElementById('diffbar-'+pid);
+  if (diffBar) {
+    const sysQ  = systemStock[pid];
+    const hasSys = sysQ !== undefined;
+    const diff   = hasSys ? (totalQty - sysQ) : null;
+    // update counted value
+    const dbcEl = document.getElementById('dbc-'+pid);
+    if (dbcEl) dbcEl.textContent = totalQty;
+    // update diff cell
+    const dbDiff = document.getElementById('dbdiff-'+pid);
+    if (dbDiff) {
+      let diffLabel = '—', diffCls = 'diff-na';
+      if (hasSys) {
+        if (diff === 0)    { diffLabel = '0';  diffCls = 'diff-ok'; }
+        else if (diff < 0) { diffLabel = String(diff); diffCls = 'diff-low'; }
+        else               { diffLabel = '+'+diff; diffCls = 'diff-high'; }
+      }
+      dbDiff.className = `diff-cell dc-diff ${diffCls}`;
+      dbDiff.querySelector('.dc-value').textContent = diffLabel;
+    }
+    // update card left border
+    item.classList.remove('diff-ok','diff-low','diff-high');
+    if (hasBatches && hasSys) {
+      if (diff === 0)    item.classList.add('diff-ok');
+      else if (diff < 0) item.classList.add('diff-low');
+      else               item.classList.add('diff-high');
+    }
+  }
+}
+
+// ── Progress / Stats ──
+function validBatch(b) { return b.batchNo || (b.qty!==''&&b.qty!==undefined&&b.qty!==null); }
+
+function updateProgress() {
+  const total   = products.length;
+  const counted = products.filter(p=>(batches[p.id]||[]).some(validBatch)).length;
+  const pct     = total ? Math.round(counted/total*100) : 0;
+  document.getElementById('progress-text').textContent = `${counted} / ${total}`;
+  document.getElementById('progress-fill').style.width = pct+'%';
+}
+
+function updateStats() {
+  const total         = products.length;
+  const counted       = products.filter(p=>(batches[p.id]||[]).some(validBatch)).length;
+  const totalBatches  = Object.values(batches).reduce((s,arr)=>s+arr.filter(validBatch).length, 0);
+  document.getElementById('stat-total').textContent   = total;
+  document.getElementById('stat-counted').textContent = counted;
+  document.getElementById('stat-batches').textContent = totalBatches;
+}
+
+function updateCategoryFilter() {
+  const cats = [...new Set(products.map(p=>p.category))].sort();
+  const sel  = document.getElementById('filter-cat');
+  const val  = sel.value;
+  sel.innerHTML = '<option value="">全部品类</option>' +
+    cats.map(c=>`<option value="${esc(c)}" ${c===val?'selected':''}>${esc(c)}</option>`).join('');
+}
+
+function clearFilter() {
+  document.getElementById('filter-cat').value = '';
+  document.getElementById('filter-name').value = '';
+  renderCountList();
+}
+
+// ── Diff filter ──
+function setDiffFilter(f, btn) {
+  diffFilter = f;
+  document.querySelectorAll('#diff-filter-row .result-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderResultList();
+}
+
+// ── Results ──
+function renderResultList() {
+  const container = document.getElementById('result-list');
+  const countedProds = products.filter(p=>(batches[p.id]||[]).some(validBatch));
+  const totalBatches = countedProds.reduce((s,p)=>s+(batches[p.id]||[]).filter(validBatch).length, 0);
+  const totalQty     = countedProds.reduce((s,p)=>s+(batches[p.id]||[]).reduce((ss,b)=>ss+(parseInt(b.qty)||0),0), 0);
+
+  document.getElementById('res-counted').textContent   = countedProds.length;
+  document.getElementById('res-batches').textContent   = totalBatches;
+  document.getElementById('res-total-qty').textContent = totalQty;
+  document.getElementById('res-uncounted').textContent = products.length - countedProds.length;
+
+  const hasSystem = Object.keys(systemStock).length > 0;
+  const diffSummaryWrap = document.getElementById('diff-summary-wrap');
+  diffSummaryWrap.style.display = hasSystem ? 'block' : 'none';
+
+  if (hasSystem) {
+    let cntOk=0, cntLow=0, cntHigh=0, cntNa=0;
+    let surplusBottles=0, shortageBottles=0, totalBottles=0;
+    countedProds.forEach(p => {
+      const total = (batches[p.id]||[]).reduce((s,b)=>s+(parseInt(b.qty)||0),0);
+      const sysQ  = systemStock[p.id];
+      const spec  = (p.spec && p.spec > 0) ? p.spec : 1;
+      if (sysQ === undefined) { cntNa++; return; }
+      const diff = total - sysQ;
+      totalBottles += sysQ * spec;
+      if (diff === 0)    { cntOk++; }
+      else if (diff < 0) { cntLow++;  shortageBottles += Math.abs(diff) * spec; }
+      else               { cntHigh++; surplusBottles  += diff * spec; }
+    });
+    document.getElementById('res-diff-ok').textContent   = cntOk;
+    document.getElementById('res-diff-low').textContent  = cntLow;
+    document.getElementById('res-diff-high').textContent = cntHigh;
+    document.getElementById('res-diff-na').textContent   = cntNa;
+
+    // Discrepancy rate
+    const rateBanner = document.getElementById('diff-rate-banner');
+    if (totalBottles > 0) {
+      rateBanner.style.display = 'block';
+      const totalDiffBottles = surplusBottles + shortageBottles;
+      const rate = totalDiffBottles / totalBottles;
+      const ratePct = (rate * 100).toFixed(2) + '%';
+      const rateEl = document.getElementById('diff-rate-pct');
+      rateEl.textContent = ratePct;
+      // Color the rate
+      if (rate === 0)       rateEl.style.color = '#4ADE80';
+      else if (rate < 0.01) rateEl.style.color = '#FCD34D';
+      else if (rate < 0.05) rateEl.style.color = '#FB923C';
+      else                  rateEl.style.color = '#F87171';
+      document.getElementById('diff-rate-detail').textContent =
+        `盘盈 ${surplusBottles}瓶 + 盘亏 ${shortageBottles}瓶 ÷ 总 ${totalBottles}瓶`;
+    } else {
+      rateBanner.style.display = 'none';
+    }
+  }
+
+  if (!countedProds.length) {
+    container.innerHTML = `<div class="empty"><div class="emoji">📋</div><p>还没有录入任何批次数据<br>请先在"盘点录入"中添加批次</p></div>`; return;
+  }
+
+  // Apply diff filter
+  let filtered = countedProds;
+  if (hasSystem && diffFilter !== 'all') {
+    filtered = countedProds.filter(p => {
+      const total = (batches[p.id]||[]).reduce((s,b)=>s+(parseInt(b.qty)||0),0);
+      const sysQ  = systemStock[p.id];
+      if (diffFilter === 'na')   return sysQ === undefined;
+      if (sysQ === undefined)    return false;
+      const diff = total - sysQ;
+      if (diffFilter === 'ok')   return diff === 0;
+      if (diffFilter === 'low')  return diff < 0;
+      if (diffFilter === 'high') return diff > 0;
+      return true;
+    });
+  }
+
+  const groups = {};
+  filtered.forEach(p=>{ (groups[p.category]=groups[p.category]||[]).push(p); });
+
+  container.innerHTML = Object.keys(groups).sort().map(cat=>`
+    <div class="cat-section-label">${esc(cat)}</div>
+    ${groups[cat].map(p=>{
+      const pb    = (batches[p.id]||[]).filter(validBatch);
+      const total = pb.reduce((s,b)=>s+(parseInt(b.qty)||0),0);
+      const sysQ  = systemStock[p.id];
+      const hasSys = sysQ !== undefined && hasSystem;
+      const diff   = hasSys ? (total - sysQ) : null;
+
+      let diffChip = '';
+      let resultBorder = '';
+      if (hasSys) {
+        if (diff === 0)    { diffChip = `<span class="diff-chip ok">±0 吻合</span>`;        resultBorder = 'border-left:3px solid var(--green)'; }
+        else if (diff < 0) { diffChip = `<span class="diff-chip low">${diff} 偏少</span>`;  resultBorder = 'border-left:3px solid var(--yellow)'; }
+        else               { diffChip = `<span class="diff-chip high">+${diff} 偏多</span>`; resultBorder = 'border-left:3px solid var(--blue)'; }
+      }
+
+      // System row & diff row for table
+      const sysRow = hasSys ? `
+        <tr class="result-sys-row">
+          <td style="font-family:'DM Mono',monospace">系统库存</td>
+          <td class="qty">${sysQ}</td>
+        </tr>` : '';
+
+      let diffRowCls = '';
+      let diffRowLabel = '';
+      if (hasSys) {
+        if (diff === 0)    { diffRowCls = 'ok';   diffRowLabel = '± 0（吻合）'; }
+        else if (diff < 0) { diffRowCls = 'low';  diffRowLabel = `${diff}（偏少）`; }
+        else               { diffRowCls = 'high'; diffRowLabel = `+${diff}（偏多）`; }
+      }
+      const diffRow = hasSys ? `
+        <tr class="result-diff-row ${diffRowCls}">
+          <td>差异</td>
+          <td class="qty">${diffRowLabel}</td>
+        </tr>` : '';
+
+      return `
+      <div class="result-product" style="${resultBorder}">
+        <div class="result-product-header">
+          <div style="flex:1;min-width:0">
+            <div class="result-product-name">${esc(p.name)}</div>
+            ${p.code ? `<div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-3);margin-top:2px">${esc(p.code)}</div>` : ''}
+          </div>
+          ${diffChip}
+          <div class="result-product-total">${total}</div>
+        </div>
+        <table class="result-batch-table">
+          <thead><tr><th>批次号</th><th style="text-align:right">数量</th></tr></thead>
+          <tbody>
+            ${pb.map(b=>`
+              <tr>
+                <td style="font-family:'DM Mono',monospace;color:var(--ink-2)">${esc(b.batchNo||'（未填写）')}</td>
+                <td class="qty">${parseInt(b.qty)||0}</td>
+              </tr>`).join('')}
+            <tr style="background:var(--green-light)">
+              <td style="font-size:12px;font-weight:600;color:var(--green)">盘点合计</td>
+              <td class="qty" style="color:var(--green);font-weight:700">${total}</td>
+            </tr>
+            ${sysRow}
+            ${diffRow}
+          </tbody>
+        </table>
+      </div>`;
+    }).join('')}
+  `).join('');
+}
+
+// ── Export ── same product's batches on one row; same batch number merged & summed
+function getMergedBatches(pid) {
+  const raw = (batches[pid]||[]).filter(validBatch);
+  const map = new Map();
+  raw.forEach(b => {
+    const key = (b.batchNo || '').trim();
+    map.set(key, (map.get(key) || 0) + (parseInt(b.qty) || 0));
+  });
+  return [...map.entries()]
+    .sort((a, b) => {
+      if (a[0] === '' && b[0] !== '') return 1;
+      if (a[0] !== '' && b[0] === '') return -1;
+      return a[0].localeCompare(b[0]);
+    })
+    .map(([batchNo, qty]) => ({ batchNo, qty }));
+}
+
+function getExportWide() {
+  const countedProds = products.filter(p => (batches[p.id]||[]).some(validBatch));
+  if (!countedProds.length) return { headers: [], rows: [], maxBatches: 0 };
+
+  const mergedMap = {};
+  countedProds.forEach(p => { mergedMap[p.id] = getMergedBatches(p.id); });
+
+  const maxBatches = countedProds.reduce((m, p) =>
+    Math.max(m, mergedMap[p.id].length), 0);
+
+  const hasSystem = Object.keys(systemStock).length > 0;
+
+  const headers = ['品类', '产品代码', '产品名称', '产品规格(瓶/件)'];
+  for (let i = 1; i <= maxBatches; i++) {
+    headers.push(`批次${i}号`, `批次${i}数量`);
+  }
+  headers.push('盘点合计');
+  if (hasSystem) { headers.push('系统库存', '差异(件)', '差异(瓶)'); }
+
+  const rows = countedProds.map(p => {
+    const pb    = mergedMap[p.id];
+    const total = pb.reduce((s, b) => s + b.qty, 0);
+    const spec  = (p.spec && p.spec > 0) ? p.spec : 1;
+    const row   = { '品类': p.category, '产品代码': p.code||'', '产品名称': p.name, '产品规格(瓶/件)': spec };
+    for (let i = 0; i < maxBatches; i++) {
+      row[`批次${i+1}号`]   = pb[i] ? pb[i].batchNo : '';
+      row[`批次${i+1}数量`] = pb[i] ? pb[i].qty      : '';
+    }
+    row['盘点合计'] = total;
+    if (hasSystem) {
+      const sysQ = systemStock[p.id];
+      const diffCase = sysQ !== undefined ? (total - sysQ) : '';
+      row['系统库存']   = sysQ !== undefined ? sysQ : '';
+      row['差异(件)']  = diffCase;
+      row['差异(瓶)']  = diffCase !== '' ? diffCase * spec : '';
+    }
+    return row;
+  });
+
+  return { headers, rows, maxBatches };
+}
+
+function exportExcel() {
+  const { headers, rows, maxBatches } = getExportWide();
+  if (!rows.length) { showToast('没有已录入的批次数据'); return; }
+
+  const aoa = [headers];
+  rows.forEach(r => aoa.push(headers.map(h => r[h] !== undefined ? r[h] : '')));
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  const cols = [{wch:12},{wch:14},{wch:20},{wch:12}];
+  for (let i = 0; i < maxBatches; i++) cols.push({wch:16},{wch:10});
+  cols.push({wch:8});
+  if (Object.keys(systemStock).length > 0) cols.push({wch:8},{wch:8},{wch:8});
+  ws['!cols'] = cols;
+
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let C = range.s.c; C <= range.e.c; C++) {
+    const addr = XLSX.utils.encode_cell({r:0, c:C});
+    if (!ws[addr]) continue;
+    ws[addr].s = { font:{bold:true}, alignment:{horizontal:'center'} };
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '盘点结果');
+  XLSX.writeFile(wb, `库存盘点_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast(`✅ 已导出 ${rows.length} 个品项`);
+}
+
+function exportCSV() {
+  const { headers, rows } = getExportWide();
+  if (!rows.length) { showToast('没有已录入的批次数据'); return; }
+
+  const escape = v => `"${String(v).replace(/"/g,'""')}"`;
+  const headerLine = headers.map(escape).join(',');
+  const bodyLines  = rows.map(r => headers.map(h => {
+    const v = r[h] !== undefined ? r[h] : '';
+    return typeof v === 'number' ? v : escape(v);
+  }).join(','));
+
+  const blob = new Blob(['\ufeff' + [headerLine, ...bodyLines].join('\n')],
+    {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `库存盘点_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showToast(`✅ 已导出 ${rows.length} 个品项`);
+}
+
+function downloadTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['品类','产品代码','产品名称','产品规格','库存数量'],
+    ['饮料','DRK-001','可口可乐 330ml', 24, 100],
+    ['饮料','DRK-002','矿泉水 550ml', 12, 200],
+    ['零食','SNK-001','薯片 大包', 6, 50],
+    ['日化','HYG-001','洗手液 500ml', 12, 80]
+  ]);
+  ws['!cols'] = [{wch:14},{wch:14},{wch:20},{wch:12},{wch:10}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '商品库存');
+  XLSX.writeFile(wb, '库存盘点模板.xlsx');
+  showToast('模板已下载（含产品规格、库存数量列）');
+}
+
+function resetCounts() {
+  if (!confirm('确认清空所有批次录入数据？（商品列表和系统库存不会被删除）')) return;
+  batches = {};
+  saveBatches(); renderAll();
+  showToast('已清空盘点数据');
+}
+
+// ── Helpers ──
+function renderAll() {
+  renderProductTable();
+  updateCategoryFilter();
+  updateStats();
+  updateProgress();
+  updateStockStatusBar();
+  if (document.getElementById('page-count').classList.contains('active'))  renderCountList();
+  if (document.getElementById('page-result').classList.contains('active')) renderResultList();
+}
+
+function saveProducts()    { try { localStorage.setItem('inv2_products',    JSON.stringify(products));    } catch(e){} }
+function saveBatches()     { try { localStorage.setItem('inv2_batches',     JSON.stringify(batches));     } catch(e){} }
+function saveSystemStock() { try { localStorage.setItem('inv2_systemstock', JSON.stringify(systemStock)); } catch(e){} }
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 2500);
+}
+
+// 注册 Service Worker（PWA 离线支持）
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      console.log('[PWA] Service Worker 注册成功', reg.scope);
+    }).catch(err => {
+      console.warn('[PWA] Service Worker 注册失败', err);
+    });
+  });
+}
+</script>
+</body>
+</html>
